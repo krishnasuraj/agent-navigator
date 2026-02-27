@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-surface-0: #0a0a0f;
+  --color-surface-1: #12121a;
+  --color-surface-2: #1a1a26;
+  --color-surface-3: #242434;
+  --color-border: #2a2a3d;
+  --color-border-bright: #3a3a55;
+  --color-text-primary: #e4e4ed;
+  --color-text-secondary: #8888a4;
+  --color-text-muted: #5c5c78;
+  --color-status-backlog: #6b7280;
+  --color-status-running: #3b82f6;
+  --color-status-guidance: #f59e0b;
+  --color-status-review: #a855f7;
+  --color-status-merged: #22c55e;
+  --color-status-failed: #ef4444;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface-0);
+  color: var(--color-text-primary);
+  margin: 0;
+  min-height: 100vh;
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
