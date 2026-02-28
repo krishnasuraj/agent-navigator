@@ -1,23 +1,15 @@
 import { useState } from 'react'
 
-const agentOptions = [
-  { id: 'claude-code', label: 'Claude Code', icon: '◈', color: 'border-orange-400 bg-orange-400/10 text-orange-400' },
-  { id: 'codex', label: 'Codex', icon: '◉', color: 'border-emerald-400 bg-emerald-400/10 text-emerald-400' },
-  { id: 'cursor', label: 'Cursor', icon: '▸', color: 'border-blue-400 bg-blue-400/10 text-blue-400' },
-]
-
-const baseBranches = ['main', 'develop', 'feature/auth', 'feature/payments']
+const baseBranches = ['main', 'develop']
 
 export default function TaskModal({ onClose, onCreateTask }) {
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [agent, setAgent] = useState('claude-code')
   const [baseBranch, setBaseBranch] = useState('main')
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!title.trim()) return
-    onCreateTask({ title: title.trim(), description: description.trim(), agent, baseBranch })
+    await onCreateTask({ title: title.trim(), baseBranch })
     onClose()
   }
 
@@ -39,46 +31,17 @@ export default function TaskModal({ onClose, onCreateTask }) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="What should the agent do?"
+              placeholder="Short name for the task"
               className="w-full rounded-lg border border-border bg-surface-0 px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-border-bright transition-colors"
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide context and details for the agent..."
-              rows={3}
-              className="w-full rounded-lg border border-border bg-surface-0 px-3 py-2 text-sm text-text-primary placeholder-text-muted outline-none focus:border-border-bright transition-colors resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Agent</label>
-            <div className="grid grid-cols-3 gap-2">
-              {agentOptions.map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setAgent(opt.id)}
-                  className={`flex flex-col items-center gap-1 rounded-lg border p-3 text-xs font-medium transition-all cursor-pointer ${
-                    agent === opt.id
-                      ? opt.color
-                      : 'border-border bg-surface-2 text-text-secondary hover:border-border-bright'
-                  }`}
-                >
-                  <span className="font-mono text-lg">{opt.icon}</span>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">Base Branch</label>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Base Branch
+              <span className="ml-1.5 font-normal text-text-muted">- agent works in an isolated worktree</span>
+            </label>
             <select
               value={baseBranch}
               onChange={(e) => setBaseBranch(e.target.value)}

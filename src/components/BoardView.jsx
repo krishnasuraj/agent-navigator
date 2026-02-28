@@ -1,15 +1,13 @@
 import TaskCard from './TaskCard'
 
 const columns = [
-  { status: 'backlog', label: 'Backlog', color: 'bg-status-backlog' },
-  { status: 'running', label: 'Running', color: 'bg-status-running' },
-  { status: 'needs-guidance', label: 'Needs Guidance', color: 'bg-status-guidance' },
-  { status: 'review', label: 'Review', color: 'bg-status-review' },
-  { status: 'merged', label: 'Merged', color: 'bg-status-merged' },
-  { status: 'failed', label: 'Failed', color: 'bg-status-failed' },
+  { status: 'idle', label: 'Idle', color: 'bg-status-backlog' },
+  { status: 'in-progress', label: 'In Progress', color: 'bg-status-running' },
+  { status: 'input-required', label: 'Input Required', color: 'bg-status-guidance' },
+  { status: 'completed', label: 'Completed', color: 'bg-status-merged' },
 ]
 
-export default function BoardView({ tasks, onUpdateStatus }) {
+export default function BoardView({ tasks, onSelectTask, selectedTaskId }) {
   return (
     <div className="flex gap-4 overflow-x-auto px-6 pb-6 min-h-0 flex-1">
       {columns.map((col) => {
@@ -28,7 +26,12 @@ export default function BoardView({ tasks, onUpdateStatus }) {
             </div>
             <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1">
               {colTasks.map((task) => (
-                <TaskCard key={task.id} task={task} onUpdateStatus={onUpdateStatus} />
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onSelectTask={onSelectTask}
+                  isSelected={task.id === selectedTaskId}
+                />
               ))}
               {colTasks.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border p-6 text-center">

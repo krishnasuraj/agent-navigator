@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 
 @theme {
   --font-sans: "Inter", system-ui, sans-serif;
@@ -12,12 +13,11 @@
   --color-text-primary: #e4e4ed;
   --color-text-secondary: #8888a4;
   --color-text-muted: #5c5c78;
+  --color-status-idle: #6b7280;
   --color-status-backlog: #6b7280;
   --color-status-running: #3b82f6;
   --color-status-guidance: #f59e0b;
-  --color-status-review: #a855f7;
   --color-status-merged: #22c55e;
-  --color-status-failed: #ef4444;
 }
 
 body {

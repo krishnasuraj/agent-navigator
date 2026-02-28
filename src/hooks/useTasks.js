@@ -1,67 +1,42 @@
-import { useReducer, useMemo, useCallback } from 'react'
-import { mockTasks } from '../data/mockTasks'
-
-function taskReducer(state, action) {
-  switch (action.type) {
-    case 'ADD_TASK':
-      return [...state, action.payload]
-    case 'UPDATE_STATUS': {
-      return state.map((task) =>
-        task.id === action.payload.id
-          ? { ...task, status: action.payload.status, updatedAt: Date.now() }
-          : task
-      )
-    }
-    default:
-      return state
-  }
-}
-
-let nextId = 11
+import { useState, useEffect, useMemo, useCallback } from 'react'
 
 export function useTasks() {
-  const [tasks, dispatch] = useReducer(taskReducer, mockTasks)
+  const [tasks, setTasks] = useState([])
 
-  const addTask = useCallback(({ title, description, agent, baseBranch }) => {
-    const id = String(nextId++)
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 40)
-    const branch = `feat/${slug}`
+  useEffect(() => {
+    window.electronAPI.getTasks().then(setTasks)
 
-    dispatch({
-      type: 'ADD_TASK',
-      payload: {
-        id,
-        title,
-        description,
-        agent,
-        status: 'backlog',
-        branch,
-        baseBranch,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        filesChanged: 0,
-        tokenUsage: 0,
-        summary: null,
-        error: null,
-      },
+    const removeCreated = window.electronAPI.onTaskCreated((task) => {
+      setTasks((prev) => [...prev, task])
     })
+
+    const removeUpdated = window.electronAPI.onTaskUpdated((task) => {
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
+    })
+
+    const removeDeleted = window.electronAPI.onTaskDeleted((taskId) => {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    })
+
+    return () => {
+      removeCreated()
+      removeUpdated()
+      removeDeleted()
+    }
   }, [])
 
-  const updateStatus = useCallback((id, status) => {
-    dispatch({ type: 'UPDATE_STATUS', payload: { id, status } })
+  const createTask = useCallback(({ title, baseBranch }) => {
+    return window.electronAPI.createTask({ title, baseBranch })
   }, [])
 
-  const queueCount = useMemo(
-    () =>
-      tasks.filter((t) =>
-        ['needs-guidance', 'review', 'failed'].includes(t.status)
-      ).length,
-    [tasks]
+  const deleteTask = useCallback((taskId) => {
+    return window.electronAPI.deleteTask(taskId)
+  }, [])
+
+  const inputRequiredCount = useMemo(
+    () => tasks.filter((t) => t.status === 'input-required').length,
+    [tasks],
   )
 
-  return { tasks, addTask, updateStatus, queueCount }
+  return { tasks, createTask, deleteTask, inputRequiredCount }
 }
