@@ -44,37 +44,17 @@ function createWindow() {
     ptyManager.resize(sessionId, cols, rows)
   })
 
-  // IPC: List recent Claude sessions for a given directory
-  ipcMain.handle('sessions:list-recent', (_, cwd) => {
-    return jsonlWatcher.listRecentSessions(cwd || process.cwd())
-  })
-
-  // IPC: Native folder picker
-  ipcMain.handle('dialog:pick-folder', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openDirectory'],
-    })
-    if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
-  })
-
-  // IPC: Spawn a new session (fresh or resumed)
+  // IPC: Spawn a new session — just a shell, user starts Claude themselves
   ipcMain.handle('session:spawn', (_, sessionId, opts) => {
     const cwd = opts.cwd || process.cwd()
-    const claudeSessionId = opts.claudeSessionId || null
 
-    // Both new and resumed sessions use snapshot-based file detection.
-    // Claude --resume creates a NEW .jsonl file (different UUID from the original),
-    // so we can't just lock to <sessionId>.jsonl — we must detect the new file.
-    const existingFiles = jsonlWatcher.snapshotFiles(cwd)
+    // Snapshot all .jsonl files globally BEFORE spawning
+    const existingFiles = jsonlWatcher.snapshotFiles()
 
-    if (claudeSessionId) {
-      ptyManager.spawn(sessionId, { cwd, claudeSessionId })
-    } else {
-      ptyManager.spawn(sessionId, { cwd, initialPrompt: opts.initialPrompt })
-    }
+    ptyManager.spawn(sessionId, { cwd })
 
-    jsonlWatcher.startWatching(sessionId, cwd, { existingFiles })
+    // Watch all of ~/.claude/projects/ for any new .jsonl file
+    jsonlWatcher.startWatching(sessionId, { existingFiles })
 
     // Wire PTY signals → JSONL watcher for instant state transitions
     ptyManager.onThinking(sessionId, (sid) => {
@@ -82,6 +62,9 @@ function createWindow() {
     })
     ptyManager.onPermissionPrompt(sessionId, (sid) => {
       jsonlWatcher.notifyPermissionPrompt(sid)
+    })
+    ptyManager.onShellReturn(sessionId, (sid) => {
+      jsonlWatcher.notifyShellReturn(sid)
     })
 
     return { sessionId, cwd }

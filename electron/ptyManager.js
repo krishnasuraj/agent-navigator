@@ -60,6 +60,11 @@ const PERMISSION_PATTERNS = [
   /Yes.*don't ask again/i,                  // "Yes, and don't ask again" option
 ]
 
+// Patterns that indicate the shell prompt has returned (Claude exited)
+// Matches common prompt endings: $, %, ❯, >, #
+// The prompt typically appears at the start of a line after Claude exits
+const SHELL_PROMPT_PATTERN = /(?:^|\n)\s*(?:.*[$%❯>#])\s*$/
+
 // How much PTY output to keep in the rolling buffer (bytes)
 const PTY_BUFFER_SIZE = 4096
 
@@ -92,6 +97,16 @@ export function createPtyManager(getWindow) {
     const recent = stripAnsi(recentRaw)
     const now = Date.now()
 
+    // Detect Claude starting — look for Claude's initial output patterns
+    if (!session.claudeRunning) {
+      // Claude Code prints its header with ╭ or shows "Claude Code" or thinking spinner
+      if (/╭|Claude Code|\*\s+[A-Z][a-z]+[.…]/.test(recent)) {
+        session.claudeRunning = true
+        console.log(`[ptyManager:${sessionId}] Claude detected as running`)
+      }
+      return
+    }
+
     // Check for thinking spinners — all use "* Word..." or "* Word…" format
     if (/\*\s+[A-Z][a-z]+[.…]/.test(recent)) {
       if (now - session.lastThinkingFired < 3000) return
@@ -116,6 +131,18 @@ export function createPtyManager(getWindow) {
       }
     }
 
+    // Detect shell prompt returning (Claude exited)
+    if (session.claudeRunning && SHELL_PROMPT_PATTERN.test(recent)) {
+      if (now - session.lastShellReturnFired < 3000) return
+      session.lastShellReturnFired = now
+      session.claudeRunning = false
+      session.outputBuffer = ''
+      console.log(`[ptyManager:${sessionId}] shell prompt returned — Claude exited`)
+      if (session.shellReturnCallback) {
+        session.shellReturnCallback(sessionId)
+      }
+    }
+
   }
 
   /**
@@ -126,7 +153,7 @@ export function createPtyManager(getWindow) {
    * @param {string} [opts.claudeSessionId] - Resume an existing Claude session
    * @param {string} [opts.initialPrompt] - Optional prompt to type after spawn
    */
-  function spawn(sessionId, { cwd, claudeSessionId, initialPrompt }) {
+  function spawn(sessionId, { cwd, claudeSessionId, initialPrompt, autoLaunch = false }) {
     if (sessions.has(sessionId)) {
       console.warn(`[ptyManager] session ${sessionId} already exists`)
       return
@@ -152,8 +179,11 @@ export function createPtyManager(getWindow) {
       outputBuffer: '',
       lastPermissionFired: 0,
       lastThinkingFired: 0,
+      lastShellReturnFired: 0,
+      claudeRunning: false,
       permissionCallback: null,
       thinkingCallback: null,
+      shellReturnCallback: null,
     })
 
     // Forward PTY data to renderer + check for prompts/spinners
@@ -168,22 +198,23 @@ export function createPtyManager(getWindow) {
       sendToRenderer('pty:exit', sessionId, { exitCode, signal })
     })
 
-    // Launch claude in the PTY after a brief delay for shell init
-    setTimeout(() => {
-      let cmd = claudeBin
-      if (claudeSessionId) {
-        cmd += ` --resume "${claudeSessionId}"`
-      }
-      ptyProcess.write(`${cmd}\r`)
+    // Optionally auto-launch claude in the PTY
+    if (autoLaunch || claudeSessionId) {
+      setTimeout(() => {
+        let cmd = claudeBin
+        if (claudeSessionId) {
+          cmd += ` --resume "${claudeSessionId}"`
+        }
+        ptyProcess.write(`${cmd}\r`)
 
-      // If there's an initial prompt, type it after Claude starts
-      if (initialPrompt) {
-        setTimeout(() => {
-          ptyProcess.write(initialPrompt)
-          ptyProcess.write('\r')
-        }, 2000)
-      }
-    }, 500)
+        if (initialPrompt) {
+          setTimeout(() => {
+            ptyProcess.write(initialPrompt)
+            ptyProcess.write('\r')
+          }, 2000)
+        }
+      }, 500)
+    }
 
     return ptyProcess
   }
@@ -252,5 +283,15 @@ export function createPtyManager(getWindow) {
     }
   }
 
-  return { spawn, write, resize, kill, killAll, has, onPermissionPrompt, onThinking }
+  /**
+   * Register a callback that fires when the shell prompt returns (Claude exited).
+   */
+  function onShellReturn(sessionId, callback) {
+    const session = sessions.get(sessionId)
+    if (session) {
+      session.shellReturnCallback = callback
+    }
+  }
+
+  return { spawn, write, resize, kill, killAll, has, onPermissionPrompt, onThinking, onShellReturn }
 }

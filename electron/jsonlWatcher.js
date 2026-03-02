@@ -172,43 +172,56 @@ export function createJsonlWatcher(getWindow) {
     return path.join(os.homedir(), '.claude', 'projects', encodeProjectPath(cwd))
   }
 
-  /**
-   * Snapshot all existing .jsonl filenames in the project dir.
-   * Call this BEFORE spawning Claude so we can diff later.
-   */
-  function snapshotFiles(cwd) {
-    const projectDir = getProjectDir(cwd)
-    try {
-      return new Set(
-        fs.readdirSync(projectDir).filter((f) => f.endsWith('.jsonl'))
-      )
-    } catch {
-      return new Set()
-    }
+  function getProjectsRoot() {
+    return path.join(os.homedir(), '.claude', 'projects')
   }
 
   /**
-   * Start watching for the session's JSONL file.
-   *
-   * Two modes:
-   *  1. New session: pass existingFiles snapshot. Watcher waits for a NEW
-   *     .jsonl file to appear and locks onto it.
-   *  2. Resumed session: pass claudeSessionId. Watcher locks directly onto
-   *     <claudeSessionId>.jsonl, skips to end, tails new content. Also reads
-   *     the last few events to derive initial status.
+   * Snapshot all existing .jsonl files across ALL project dirs.
+   * Returns a Set of full paths. Call BEFORE spawning so we can diff later.
+   */
+  /**
+   * Snapshot all existing .jsonl files across ALL project dirs.
+   * Returns a Map of full path → file size in bytes.
+   * Call BEFORE spawning so we can diff later.
+   */
+  function snapshotFiles() {
+    const root = getProjectsRoot()
+    const files = new Map()
+    try {
+      for (const dir of fs.readdirSync(root)) {
+        const dirPath = path.join(root, dir)
+        try {
+          const stat = fs.statSync(dirPath)
+          if (!stat.isDirectory()) continue
+          for (const f of fs.readdirSync(dirPath)) {
+            if (f.endsWith('.jsonl')) {
+              const filePath = path.join(dirPath, f)
+              try {
+                files.set(filePath, fs.statSync(filePath).size)
+              } catch { files.set(filePath, 0) }
+            }
+          }
+        } catch { /* */ }
+      }
+    } catch { /* */ }
+    return files
+  }
+
+  /**
+   * Start watching for any new JSONL file across all project dirs.
+   * When the user starts Claude in any directory, the watcher picks it up.
    *
    * @param {string} sessionId - Our internal session ID
-   * @param {string} cwd - Working directory
    * @param {object} opts
-   * @param {Set<string>} [opts.existingFiles] - Snapshot from before spawn (new session)
-   * @param {string} [opts.claudeSessionId] - Claude's session UUID (resumed session)
+   * @param {Set<string>} [opts.existingFiles] - Snapshot from before spawn (full paths)
    */
-  function startWatching(sessionId, cwd, opts = {}) {
-    const projectDir = getProjectDir(cwd)
-    const { existingFiles, claudeSessionId } = opts
+  function startWatching(sessionId, opts = {}) {
+    const projectsRoot = getProjectsRoot()
+    const { existingFiles } = opts
 
-    if (!fs.existsSync(projectDir)) {
-      try { fs.mkdirSync(projectDir, { recursive: true }) } catch { /* */ }
+    if (!fs.existsSync(projectsRoot)) {
+      try { fs.mkdirSync(projectsRoot, { recursive: true }) } catch { /* */ }
     }
 
     const state = {
@@ -218,61 +231,55 @@ export function createJsonlWatcher(getWindow) {
       lastWriteTime: Date.now(),
       staleTimer: null,
       locked: false,
+      unlockTimer: null,
+      knownFiles: existingFiles || new Set(),
     }
 
-    // ── Resumed session: lock onto known file immediately ──
-    if (claudeSessionId) {
-      const targetFile = path.join(projectDir, `${claudeSessionId}.jsonl`)
-      console.log(`[jsonlWatcher:${sessionId}] RESUME mode — locking to ${claudeSessionId}.jsonl`)
+    console.log(`[jsonlWatcher:${sessionId}] watching ${projectsRoot} (all projects)`)
 
-      if (fs.existsSync(targetFile)) {
-        state.filePath = targetFile
-        state.locked = true
-
-        // Read the last few events to derive initial status
-        const initialEvents = readLastEvents(targetFile, 10)
-        state.events = initialEvents
-
-        // Skip to end — only tail new content going forward
-        try { state.bytesRead = fs.statSync(targetFile).size } catch { /* */ }
-
-        // Send initial state to renderer
-        if (initialEvents.length > 0) {
-          const derived = deriveState(initialEvents, Date.now())
-          sendToRenderer('jsonl:state', sessionId, derived)
-        }
-      } else {
-        console.warn(`[jsonlWatcher:${sessionId}] resume file not found, falling back to new-file detection`)
-        // Fall through to watcher below
-      }
-    }
-
-    console.log(`[jsonlWatcher:${sessionId}] watching ${projectDir}`)
-
-    const watcher = watch(projectDir, {
+    const watcher = watch(projectsRoot, {
       ignoreInitial: false,
       awaitWriteFinish: false,
-      depth: 0,
+      depth: 1,
     })
 
-    // For new sessions: detect new file via snapshot diff
+    // Detect new JSONL files via snapshot diff
     watcher.on('add', (filePath) => {
       if (state.locked) return
       if (!filePath.endsWith('.jsonl')) return
+      if (state.knownFiles.has(filePath)) return
 
-      const basename = path.basename(filePath)
-      if (existingFiles && existingFiles.has(basename)) return
-
-      console.log(`[jsonlWatcher:${sessionId}] LOCKED to new session file: ${basename}`)
+      console.log(`[jsonlWatcher:${sessionId}] LOCKED to new session file: ${path.basename(filePath)}`)
       state.filePath = filePath
       state.bytesRead = 0
       state.locked = true
+      sendToRenderer('jsonl:session-started', sessionId)
       readNewLines(sessionId, state)
     })
 
-    // Tail the locked file when it changes
+    // Tail the locked file when it changes, or detect resumed sessions
     watcher.on('change', (filePath) => {
-      if (!state.locked || filePath !== state.filePath) return
+      if (!filePath.endsWith('.jsonl')) return
+
+      // If unlocked, this could be a resumed session writing to an existing file
+      if (!state.locked) {
+        const snapshotSize = state.knownFiles.get(filePath)
+        if (snapshotSize === undefined) return // unknown file, ignore
+
+        let currentSize
+        try { currentSize = fs.statSync(filePath).size } catch { return }
+        if (currentSize <= snapshotSize) return // file didn't grow
+
+        console.log(`[jsonlWatcher:${sessionId}] LOCKED to resumed session file: ${path.basename(filePath)} (grew from ${snapshotSize} to ${currentSize})`)
+        state.filePath = filePath
+        state.bytesRead = 0  // read from beginning to get full history
+        state.locked = true
+        sendToRenderer('jsonl:session-started', sessionId)
+        readNewLines(sessionId, state)
+        return
+      }
+
+      if (filePath !== state.filePath) return
 
       state.lastWriteTime = Date.now()
       readNewLines(sessionId, state)
@@ -281,6 +288,25 @@ export function createJsonlWatcher(getWindow) {
       state.staleTimer = setTimeout(() => {
         const derived = deriveState(state.events, state.lastWriteTime)
         sendToRenderer('jsonl:state', sessionId, derived)
+
+        // Fallback: if file hasn't changed in 30s and state is idle/done,
+        // the session likely ended without a result event (e.g., Ctrl+C).
+        // Schedule a delayed unlock check.
+        if (!state.unlockTimer) {
+          state.unlockTimer = setTimeout(() => {
+            state.unlockTimer = null
+            if (!state.locked) return
+            const staleSec = (Date.now() - state.lastWriteTime) / 1000
+            if (staleSec > 25) {
+              console.log(`[jsonlWatcher:${sessionId}] session stale for ${staleSec.toFixed(0)}s — unlocking`)
+              sendToRenderer('jsonl:state', sessionId, { state: 'done', summary: 'Session ended' })
+              sendToRenderer('jsonl:session-ended', sessionId)
+              state.locked = false
+              state.events = []
+              state.knownFiles = snapshotFiles()
+            }
+          }, 25000)
+        }
       }, 5000)
     })
 
@@ -346,6 +372,22 @@ export function createJsonlWatcher(getWindow) {
               sendToRenderer('jsonl:event', sessionId, e)
             }
           }
+
+          // Detect Claude session end — the "result" event means Claude exited
+          if (event.type === 'result') {
+            sendToRenderer('jsonl:state', sessionId, { state: 'done', summary: 'Session complete' })
+            sendToRenderer('jsonl:session-ended', sessionId)
+
+            // Unlock watcher so it can detect the next Claude session.
+            // Re-snapshot so only truly new files get picked up.
+            state.locked = false
+            state.events = []
+            clearTimeout(state.staleTimer)
+            clearTimeout(state.unlockTimer)
+            state.unlockTimer = null
+            state.knownFiles = snapshotFiles()
+            return
+          }
         }
 
         const derived = deriveState(state.events, state.lastWriteTime)
@@ -381,6 +423,8 @@ export function createJsonlWatcher(getWindow) {
 
     // Reset the stale timer so it doesn't flip back to idle
     clearTimeout(state.staleTimer)
+    clearTimeout(state.unlockTimer)
+    state.unlockTimer = null
     state.staleTimer = setTimeout(() => {
       const derived = deriveState(state.events, state.lastWriteTime)
       sendToRenderer('jsonl:state', sessionId, derived)
@@ -415,10 +459,34 @@ export function createJsonlWatcher(getWindow) {
     sendToRenderer('jsonl:state', sessionId, derived)
   }
 
+  /**
+   * Called by ptyManager when the shell prompt returns (Claude exited).
+   * Immediately ends the session regardless of whether a result event was written.
+   */
+  function notifyShellReturn(sessionId) {
+    const entry = watchers.get(sessionId)
+    if (!entry) return
+
+    const { state } = entry
+    if (!state.locked) return
+
+    console.log(`[jsonlWatcher:${sessionId}] shell return detected — ending session`)
+    sendToRenderer('jsonl:state', sessionId, { state: 'done', summary: 'Session ended' })
+    sendToRenderer('jsonl:session-ended', sessionId)
+
+    state.locked = false
+    state.events = []
+    clearTimeout(state.staleTimer)
+    clearTimeout(state.unlockTimer)
+    state.unlockTimer = null
+    state.knownFiles = snapshotFiles()
+  }
+
   function stopWatching(sessionId) {
     const entry = watchers.get(sessionId)
     if (!entry) return
     clearTimeout(entry.state.staleTimer)
+    clearTimeout(entry.state.unlockTimer)
     entry.watcher.close()
     watchers.delete(sessionId)
   }
@@ -426,6 +494,7 @@ export function createJsonlWatcher(getWindow) {
   function stopAll() {
     for (const [, entry] of watchers) {
       clearTimeout(entry.state.staleTimer)
+      clearTimeout(entry.state.unlockTimer)
       entry.watcher.close()
     }
     watchers.clear()
@@ -499,5 +568,5 @@ export function createJsonlWatcher(getWindow) {
     return sessions.slice(0, 10)
   }
 
-  return { snapshotFiles, getProjectDir, startWatching, stopWatching, notifyExit, notifyThinking, notifyPermissionPrompt, listRecentSessions, stopAll }
+  return { snapshotFiles, getProjectDir, startWatching, stopWatching, notifyExit, notifyThinking, notifyPermissionPrompt, notifyShellReturn, listRecentSessions, stopAll }
 }

@@ -7,9 +7,14 @@ export default function TerminalPanel({ sessionId }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
+  const sessionIdRef = useRef(sessionId)
 
+  // Keep ref in sync
+  sessionIdRef.current = sessionId
+
+  // Create terminal once on mount
   useEffect(() => {
-    if (!containerRef.current || !sessionId) return
+    if (!containerRef.current) return
 
     const term = new Terminal({
       fontFamily: '"JetBrains Mono", monospace',
@@ -49,36 +54,15 @@ export default function TerminalPanel({ sessionId }) {
     term.loadAddon(webLinksAddon)
     term.open(containerRef.current)
 
-    // Fit to container
-    try {
-      fitAddon.fit()
-    } catch {
-      // Container might not be visible yet
-    }
+    try { fitAddon.fit() } catch { /* */ }
 
     termRef.current = term
     fitAddonRef.current = fitAddon
 
-    // Send initial resize to main process
-    const { cols, rows } = term
-    window.electronAPI.ptyResize(sessionId, cols, rows)
-
-    // Terminal input → PTY
+    // Terminal input → PTY (always uses current sessionId)
     const inputDisposable = term.onData((data) => {
-      window.electronAPI.ptyWrite(sessionId, data)
-    })
-
-    // PTY output → terminal
-    const removeDataListener = window.electronAPI.onPtyData((sid, data) => {
-      if (sid === sessionId) {
-        term.write(data)
-      }
-    })
-
-    // Handle PTY exit
-    const removeExitListener = window.electronAPI.onPtyExit((sid, info) => {
-      if (sid === sessionId) {
-        term.write(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`)
+      if (sessionIdRef.current) {
+        window.electronAPI.ptyWrite(sessionIdRef.current, data)
       }
     })
 
@@ -86,21 +70,47 @@ export default function TerminalPanel({ sessionId }) {
     const observer = new ResizeObserver(() => {
       try {
         fitAddon.fit()
-        window.electronAPI.ptyResize(sessionId, term.cols, term.rows)
-      } catch {
-        // ignore
-      }
+        if (sessionIdRef.current) {
+          window.electronAPI.ptyResize(sessionIdRef.current, term.cols, term.rows)
+        }
+      } catch { /* */ }
     })
     observer.observe(containerRef.current)
 
     return () => {
       observer.disconnect()
       inputDisposable.dispose()
-      removeDataListener()
-      removeExitListener()
       term.dispose()
       termRef.current = null
       fitAddonRef.current = null
+    }
+  }, [])
+
+  // Wire PTY data/exit listeners — reconnect when sessionId changes
+  useEffect(() => {
+    if (!sessionId) return
+
+    // Send initial resize
+    if (termRef.current) {
+      const { cols, rows } = termRef.current
+      window.electronAPI.ptyResize(sessionId, cols, rows)
+    }
+
+    const removeDataListener = window.electronAPI.onPtyData((sid, data) => {
+      if (sid === sessionId && termRef.current) {
+        termRef.current.write(data)
+      }
+    })
+
+    const removeExitListener = window.electronAPI.onPtyExit((sid, info) => {
+      if (sid === sessionId && termRef.current) {
+        termRef.current.write(`\r\n\x1b[90m[Process exited with code ${info.exitCode}]\x1b[0m\r\n`)
+      }
+    })
+
+    return () => {
+      removeDataListener()
+      removeExitListener()
     }
   }, [sessionId])
 
