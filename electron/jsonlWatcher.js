@@ -200,7 +200,7 @@ export function createJsonlWatcher(getWindow) {
   }
 
   function encodeProjectPath(dirPath) {
-    return dirPath.replace(/[/_]/g, '-')
+    return dirPath.replace(/[/_.]/g, '-')
   }
 
   function getProjectDir(cwd) {

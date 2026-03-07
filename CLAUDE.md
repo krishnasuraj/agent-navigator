@@ -62,7 +62,7 @@ JSONL files are at:
 
 **Critical:** Files are directly in the project dir — **NOT in a `sessions/` subdirectory**.
 
-The encoded path replaces both `/` and `_` with `-`. Regex: `/[/_]/g`.
+The encoded path replaces `/`, `_`, and `.` with `-`. Regex: `/[/_.]/g`.
 ```
 /Users/me/my_project → -Users-me-my-project
 ```
@@ -304,7 +304,7 @@ Claude exits (shell return or result event) →
 The `claude` binary hangs silently when spawned inside another Claude session. Env vars: `CLAUDECODE`, `CLAUDE_CODE_SSE_PORT`, `CLAUDE_CODE_ENTRYPOINT`. Fix: `main.js` scrubs all `CLAUDE*` env vars at startup. `ptyManager.js` uses `getCleanEnv()`.
 
 ### JSONL path encoding
-Both `/` AND `_` replaced with `-`. Regex: `/[/_]/g`. Getting this wrong = watching the wrong directory and never finding sessions.
+Both `/`, `_`, AND `.` replaced with `-`. Regex: `/[/_.]/g`. Getting this wrong = watching the wrong directory and never finding sessions.
 
 ### JSONL files not in sessions/ subdirectory
 Despite what you might expect, files are directly in `~/.claude/projects/<encoded-path>/`, not `sessions/`.
