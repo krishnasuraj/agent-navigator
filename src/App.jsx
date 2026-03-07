@@ -212,7 +212,7 @@ export default function App() {
         className="flex items-center justify-between border-b border-border px-4 py-2 shrink-0"
         style={{ WebkitAppRegion: 'drag' }}
       >
-        <span className="text-xs font-medium text-text-secondary">Claude Code Orchestrator</span>
+        <span className="text-xs font-medium text-text-secondary pl-16">Agent Manager</span>
         <button
           onClick={() => setShowNewAgent(true)}
           style={{ WebkitAppRegion: 'no-drag' }}
