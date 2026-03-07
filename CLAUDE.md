@@ -1,4 +1,4 @@
-# Claude Code Orchestrator
+# Agent Manager
 
 ## Vision
 
@@ -152,7 +152,13 @@ Tool names: `Read`, `Write`, `Bash`, `Task`, `WebSearch`.
 **Renderer → Main (invoke):**
 | Channel | Payload |
 |---------|---------|
-| `session:spawn` | `(sessionId, { cwd? })` |
+| `session:spawn` | `(sessionId, { cwd?, initialPrompt? })` |
+| `session:kill` | `(sessionId)` |
+| `session:getCwd` | `(sessionId)` |
+| `worktree:create` | `(branch)` → `{ branch, worktreePath, existing }` |
+| `worktree:isDirty` | `(branch)` → `{ dirty }` |
+| `worktree:remove` | `(branch, force?)` |
+| `app:getTestConfig` | `()` → `{ testSessions, testCwds, testBranches }` |
 
 ---
 
@@ -164,12 +170,14 @@ electron/
   preload.js            — contextBridge exposing electronAPI
   ptyManager.js         — PTY lifecycle + output scanning (thinking, permissions, shell return)
   jsonlWatcher.js       — Global JSONL watching, state derivation, session lifecycle
+  worktreeManager.js    — Git worktree create/remove/isDirty/list
 src/
   components/
     TerminalPanel.jsx   — xterm.js terminal with FitAddon + WebLinksAddon
-    StateLog.jsx        — Sidebar: state badge + scrolling event log
+    StateLog.jsx        — Sidebar: state badge + scrolling event log (expandable rows)
+    SessionList.jsx     — Sidebar: session list with state dots + close button
     ResizableSplit.jsx  — Draggable split layout
-  App.jsx               — Auto-spawns shell, tracks claudeActive state
+  App.jsx               — Multi-session orchestration, new agent modal, close modal
   main.jsx
   index.css             — Tailwind imports + theme tokens + xterm styles
 ```
@@ -223,55 +231,32 @@ Single window: sidebar (30%) + terminal (70%). Auto-spawns a login shell. User s
 
 ---
 
-### Stage 2: Multi-Session Support
+### Stage 2: Multi-Session Support ✅ Complete
 
 **Goal:** Run multiple Claude Code sessions simultaneously, each in its own PTY + JSONL watcher. Switch between them in the UI.
 
-**What to build:**
+**What we built:**
+- Session list in sidebar — branch name, state dot, last event summary, click to switch
+- Multiple PTYs via ptyManager's existing `sessions` Map
+- Single global chokidar watcher routes JSONL events to the correct session (replaced per-session watchers to avoid race conditions)
+- CSS-hidden terminal switching (each xterm stays mounted, toggled via `display: none`) — simpler than SerializeAddon and avoids serialize/restore bugs
+- Terminal refit on tab switch (`FitAddon.fit()` in `requestAnimationFrame` after becoming visible)
+- Test mode via `--test-sessions=N` CLI arg for spawning multiple sessions at once
 
-- **Session list in sidebar.** Replace the single state badge with a list of sessions. Each entry: session name/cwd, state badge, last event summary. Click to switch which terminal is shown.
-- **Multiple PTYs in main process.** ptyManager already supports multiple sessions via its `sessions` Map. The main process just needs to support spawning more than one.
-- **Multiple JSONL watchers.** Each session gets its own watcher instance. Already supported.
-- **Background PTY buffering.** When a session isn't the active tab, its PTY output still flows. Use xterm.js `SerializeAddon` to serialize terminal state when switching away, restore when switching back. This keeps full scroll history per session.
-- **"New Session" button.** Spawns a new login shell PTY + JSONL watcher pair. No worktree yet (that's Stage 3) — just a new shell in the same or a chosen directory.
-- **Session naming.** Name sessions by their cwd basename, or let the user name them.
-
-**Session lifecycle:**
-```
-User clicks "New Session" →
-  Main: spawn PTY (login shell), start JSONL watcher →
-  Renderer: add entry to session list, switch to it
-
-User clicks different session in list →
-  Renderer: SerializeAddon.serialize() current xterm, store buffer
-  Renderer: hide current terminal, show/restore new one
-
-Claude exits (shell return or result event) →
-  JSONL watcher unlocks, sends session-ended →
-  Renderer: update session badge to "Done", keep entry in list
-```
-
-**What to validate:**
-- 3-5 simultaneous PTYs — no perf issues?
-- Switching feels instant, no flicker, scroll history preserved?
-- Independent JSONL watchers don't interfere?
+**Decision: CSS-hidden vs SerializeAddon.** SerializeAddon would save memory (unmounted terminals don't hold DOM nodes) but adds complexity: serialize on switch-away, create new Terminal + restore on switch-back, risk of losing state on serialization edge cases. CSS-hidden is simpler, tested up to 5 simultaneous sessions with no perf issues. Revisit if memory becomes a concern at 10+ sessions.
 
 ---
 
-### Stage 3: Worktree Integration + Session Spawning
+### Stage 3: Worktree Integration + Session Spawning ✅ Complete
 
 **Goal:** Proper git worktree lifecycle. Spawn a new agent on a branch with one click.
 
-**What to build:**
-
-- **"New Agent" flow.** User provides a branch name. App runs `git worktree add .worktrees/<name> -b <branch>` in the project root, spawns a PTY shell in that directory. Optionally auto-types an initial prompt via PTY write.
-- **Worktree-aware session list.** Show branch name alongside session state. Replace simple session names with branch + state + elapsed time.
-- **Cleanup.** When a session is done, offer to run `git worktree remove`. Handle dirty worktrees gracefully.
-- **Initial prompt injection.** Optionally write a starting prompt to the PTY after Claude launches. E.g. "Implement X based on issue #123. Open a PR when done."
-
-**Known gotcha:** Vite watches `.worktrees/`. When Claude edits files in a worktree, Vite triggers a page reload destroying renderer state. Already fixed: `electron.vite.config.js` ignores `.worktrees/**`.
-
-**Open question:** When Claude runs inside a worktree (`.worktrees/feat-auth/`), does the JSONL path use the worktree path or the main repo path? Needs testing before Stage 3.
+**What we built:**
+- **"New Agent" modal** (Cmd+N): enter branch name → `git worktree add .worktrees/<branch> -b <branch>` → spawn PTY in worktree dir → auto-type `claude` to launch
+- **worktreeManager.js**: `create(branch)` reuses existing worktrees, `remove(branch, {force})`, `isDirty(branch)`, `list()`. Uses `execFileSync` (not `execSync`) to prevent command injection via branch names.
+- **Close session modal** with three options: end session (keep worktree), end session + remove worktree (with dirty warning), cancel
+- **Branch validation**: `/^[\w][\w./-]*$/` before creating worktree
+- **JSONL uses worktree path** (confirmed by testing): `.worktrees/feat-auth/` → `~/.claude/projects/...-worktrees-feat-auth/`
 
 ---
 
@@ -321,6 +306,9 @@ Must detect shell prompt return via PTY output scanning. `notifyShellReturn()` i
 ### Never use a stale timer to end sessions
 A long response or extended thinking means no JSONL writes for a long time. Don't interpret silence as "Claude exited." Only shell prompt return or `result` event ends a session.
 
+### JSONL routing requires unique cwds per session
+`routeFileChange` matches JSONL files to sessions by comparing encoded cwds. If two sessions share a cwd, their JSONL files can be routed to the wrong session. Worktrees guarantee unique cwds. Never add a fallback that assigns files to "any unlocked session" — this was the root cause of the crossed-wires bug.
+
 ### Vite watches worktree files
 Ignore `.worktrees/**` in `electron.vite.config.js` `server.watch.ignored`.
 
@@ -332,6 +320,33 @@ If `fatal error: 'functional' file not found`:
 ```bash
 CXXFLAGS="-I$(xcrun --show-sdk-path)/usr/include/c++/v1 -isysroot $(xcrun --show-sdk-path)" npx electron-rebuild -f -w node-pty
 ```
+
+---
+
+## Deleted Files (v5 leftovers, removed after Stage 3)
+
+These files were part of the v5 "headless Claude via stdin/stdout" architecture, replaced entirely by the v6 terminal + JSONL approach. None were imported by any active code.
+
+| File | Prior function |
+|------|---------------|
+| `electron/claudeManager.js` | Headless Claude process manager — spawned `claude` via `child_process`, communicated via stdin/stdout JSON |
+| `electron/ipc.js` | v5 IPC handler registration for task CRUD (create/delete/send-message/abort) |
+| `electron/seed.js` | Auto-created test tasks on `--seed` flag for v5 board UI |
+| `electron/taskStore.js` | In-memory task store with status tracking, message history, worktree paths |
+| `electron/worktree.js` | Old worktree helper using `execSync` (replaced by `worktreeManager.js` with `execFileSync`) |
+| `src/components/BoardView.jsx` | Kanban board view grouping tasks by status columns |
+| `src/components/QueueView.jsx` | Flat task queue list view |
+| `src/components/SessionPanel.jsx` | Chat-style session panel showing Claude messages + tool calls |
+| `src/components/TaskCard.jsx` | Task card component for board/queue views |
+| `src/components/TaskModal.jsx` | Modal for creating new tasks with title + prompt |
+| `src/components/ToolCallCard.jsx` | Expandable card showing tool name, input, result |
+| `src/components/TopBar.jsx` | v5 top navigation bar with view switcher |
+| `src/hooks/useSession.js` | React hook for v5 session state (messages, streaming, questions) |
+| `src/hooks/useTasks.js` | React hook for v5 task list via IPC |
+| `src/hooks/useTypewriter.js` | Typewriter text animation effect |
+| `project_spec.md` | Original project spec, superseded by this file (CLAUDE.md) |
+| `TEST_PROMPTS.md` | v5 test prompts documentation |
+| `test-prompt.md` | Single test prompt for manual testing |
 
 ---
 
@@ -371,3 +386,49 @@ Single window: login shell spawned automatically, user types `claude`. JSONL wat
 | Resume not loading history | Watcher only looked for new files | Detect existing file growing past snapshot size |
 | False shell-return on resume | Stale shell prompt in buffer triggered detection immediately after resume | Clear buffer when Claude start detected |
 | Terminal blank after spawn screen removed | `setPtySessionId()` call removed accidentally | Separate `ptySessionId` (always set) from `claudeActive` |
+
+---
+
+## Stage 2 Implementation Log
+
+### Key Decisions
+
+1. **Single global chokidar watcher, not per-session.** Multiple independent watchers on the same `~/.claude/projects/` directory caused race conditions — non-deterministic callback ordering meant the wrong session would claim a JSONL file. Fix: one global watcher, one `routeFileChange()` function that routes each event to the correct session.
+
+2. **CSS-hidden terminals, not SerializeAddon.** Each xterm.js instance stays mounted in the DOM with `display: none` when inactive. Simpler and avoids edge cases with serialize/restore. Requires `FitAddon.fit()` on `requestAnimationFrame` when switching back (the terminal needs a paint cycle after `display` changes).
+
+3. **IPC handlers outside `createWindow()`.** On macOS, `app.on('activate')` can call `createWindow()` again. If IPC handlers are registered inside it, they double-register and break. Move all `ipcMain.handle` calls to module scope.
+
+### Bugs Encountered
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| Crossed session statuses | Per-session chokidar watchers raced; random session claimed each file | Single global watcher with `routeFileChange()` |
+| False shell return ending sessions | Broad shell prompt regex matched Claude's output (e.g. `$` in code) | 5 specific patterns + double-match requirement (500ms apart) |
+| Session statuses "shift up" to wrong session | `routeFileChange` second-pass fallback assigned any file to any unlocked session | Remove fallback — only cwd-matched sessions can claim files |
+| No statuses after removing fallback | `encodeProjectPath` didn't replace `.` — `.worktrees` encoded as `-.worktrees` but Claude uses `--worktrees` | Regex `/[/_]/g` → `/[/_.]/g` |
+| Thinking blocks showed as idle | `deriveState()` checked `tool_use` and `text` blocks but not `thinking` blocks | Add `thinking` check before text block check |
+
+---
+
+## Stage 3 Implementation Log
+
+### Key Decisions
+
+1. **Worktrees solve cross-session routing.** Each session gets a unique cwd via git worktree, so `routeFileChange` can match by cwd alone. No ambiguous fallback needed.
+
+2. **Auto-type `claude`, not the full binary path.** The PTY inherits the user's PATH, so just typing `claude` works. Typing `/Users/.../.local/bin/claude` looks wrong in the terminal and breaks if the binary is elsewhere.
+
+3. **`execFileSync` not `execSync` for git operations.** Branch names come from user input. `execSync` with string interpolation = command injection. `execFileSync` takes an argv array, preventing injection entirely.
+
+4. **Close modal, not `confirm()`.** Closing a session has multiple valid outcomes (keep worktree vs remove it). A three-option modal is clearer than nested confirms.
+
+5. **500ms delay between kill and worktree remove.** `git worktree remove` fails if the PTY process still has the directory as its cwd. The delay is a pragmatic workaround; a proper fix would await PTY exit.
+
+### Bugs Encountered
+
+| Bug | Root Cause | Fix |
+|-----|-----------|-----|
+| `git worktree add` fails on existing branch | No check for existing worktree | `fs.existsSync` check, return `{ existing: true }` |
+| Worktree not deleted on close | PTY process holds directory as cwd | 500ms delay between `killSession` and `worktreeRemove` |
+| macOS title bar overlaps traffic lights | `hiddenInset` title bar style needs left padding | `pl-16` on title element |

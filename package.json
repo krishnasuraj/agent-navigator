@@ -6,7 +6,6 @@
   "main": "out/main/main.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "dev:seed": "electron-vite dev -- --seed",
     "dev:test": "electron-vite dev -- --test-sessions=3",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
