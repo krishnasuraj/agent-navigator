@@ -12,9 +12,9 @@
 // same directory — where a non-deterministic callback ordering caused the wrong
 // session to claim a JSONL file.
 //
-// File assignment: when a new JSONL file starts growing, prefer the session whose
-// cwd matches the file's project directory. Falls back to any unlocked session
-// (for the case where the user cd'd to a different directory inside their shell).
+// File assignment: when a new JSONL file starts growing, match the session whose
+// cwd matches the file's project directory. No fallback — each session must have
+// a unique cwd (guaranteed by worktree isolation).
 
 import fs from 'fs'
 import path from 'path'
@@ -255,18 +255,13 @@ export function createJsonlWatcher(getWindow) {
 
     const fileProjectDir = path.dirname(filePath)
 
-    // First pass: prefer the session whose spawn cwd maps to this file's project dir.
-    // This is correct for the common case of sessions in different directories.
+    // Match the session whose spawn cwd maps to this file's project dir.
+    // Each session has a unique worktree cwd, so this is a precise match.
+    // No fallback pass — prevents "crossed wires" where an unlocked session
+    // steals JSONL events meant for a different session.
     for (const [sessionId, state] of sessionStates) {
       if (state.locked) continue
       if (getProjectDir(state.cwd) !== fileProjectDir) continue
-      if (tryClaimFile(sessionId, state, filePath)) return
-    }
-
-    // Second pass: any unlocked session (covers the case where the user cd'd inside
-    // the shell before starting Claude, so the cwd doesn't match the file's dir).
-    for (const [sessionId, state] of sessionStates) {
-      if (state.locked) continue
       if (tryClaimFile(sessionId, state, filePath)) return
     }
   }

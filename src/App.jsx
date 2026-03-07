@@ -112,33 +112,52 @@ export default function App() {
     }
   }
 
+  const [closeModal, setCloseModal] = useState(null) // { sessionId, session, dirty }
+
   const handleCloseSession = async (sessionId) => {
     const session = sessions.find(s => s.id === sessionId)
     if (!session) return
 
-    // If it's a worktree session, check for dirty state and confirm
     if (session.branch) {
+      let dirty = false
       try {
-        const { dirty } = await window.electronAPI.worktreeIsDirty(session.branch)
-        const message = dirty
-          ? `Branch "${session.branch}" has uncommitted changes. Make sure to commit or stash before closing.\n\nClose anyway?`
-          : `Close agent on branch "${session.branch}"?\n\nThis will remove the worktree.`
-        if (!confirm(message)) return
-
-        await window.electronAPI.killSession(sessionId)
-        await window.electronAPI.worktreeRemove(session.branch, dirty)
-      } catch (err) {
-        console.error('Failed to close session:', err)
-      }
+        const result = await window.electronAPI.worktreeIsDirty(session.branch)
+        dirty = result.dirty
+      } catch {}
+      setCloseModal({ sessionId, session, dirty })
     } else {
       if (!confirm('Close this session?')) return
-      try {
-        await window.electronAPI.killSession(sessionId)
-      } catch (err) {
-        console.error('Failed to kill session:', err)
-      }
+      await doEndSession(sessionId)
     }
+  }
 
+  const doEndSession = async (sessionId) => {
+    try {
+      await window.electronAPI.killSession(sessionId)
+    } catch (err) {
+      console.error('Failed to kill session:', err)
+    }
+    setSessions(prev => {
+      const remaining = prev.filter(s => s.id !== sessionId)
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
+      }
+      return remaining
+    })
+  }
+
+  const doEndSessionAndRemoveWorktree = async (sessionId, branch, dirty) => {
+    if (dirty) {
+      if (!confirm(`Branch "${branch}" has uncommitted changes.\n\nRemove worktree anyway?`)) return
+    }
+    try {
+      await window.electronAPI.killSession(sessionId)
+      // Small delay to let PTY process release the directory
+      await new Promise(r => setTimeout(r, 500))
+      await window.electronAPI.worktreeRemove(branch, dirty)
+    } catch (err) {
+      console.error('Failed to remove worktree:', err)
+    }
     setSessions(prev => {
       const remaining = prev.filter(s => s.id !== sessionId)
       if (activeSessionId === sessionId) {
@@ -210,6 +229,57 @@ export default function App() {
         minLeftPx={250}
         minRightPx={400}
       />
+
+      {closeModal && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+          onClick={() => setCloseModal(null)}
+        >
+          <div
+            className="bg-surface-1 border border-border rounded-lg p-6 w-96 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-text-primary mb-2">
+              Close "{closeModal.session.branch}"
+            </h2>
+            {closeModal.dirty && (
+              <p className="text-xs text-status-guidance mb-4">
+                This branch has uncommitted changes.
+              </p>
+            )}
+            <div className="flex flex-col gap-2 mt-4">
+              <button
+                onClick={() => {
+                  const { sessionId } = closeModal
+                  setCloseModal(null)
+                  doEndSession(sessionId)
+                }}
+                className="w-full text-xs text-left bg-surface-0 hover:bg-surface-2 text-text-primary border border-border rounded px-3 py-2.5 transition-colors"
+              >
+                <span className="font-medium">End session</span>
+                <span className="text-text-muted block mt-0.5">Kill Claude and close the terminal. Worktree stays on disk.</span>
+              </button>
+              <button
+                onClick={() => {
+                  const { sessionId, session, dirty } = closeModal
+                  setCloseModal(null)
+                  doEndSessionAndRemoveWorktree(sessionId, session.branch, dirty)
+                }}
+                className="w-full text-xs text-left bg-surface-0 hover:bg-surface-2 text-text-primary border border-border rounded px-3 py-2.5 transition-colors"
+              >
+                <span className="font-medium">End session + remove worktree</span>
+                <span className="text-text-muted block mt-0.5">Kill Claude, close the terminal, and delete the worktree directory.</span>
+              </button>
+              <button
+                onClick={() => setCloseModal(null)}
+                className="w-full text-xs text-text-muted hover:text-text-primary px-3 py-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNewAgent && (
         <div

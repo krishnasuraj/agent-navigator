@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 
-export default function TerminalPanel({ sessionId }) {
+export default function TerminalPanel({ sessionId, active }) {
   const containerRef = useRef(null)
   const termRef = useRef(null)
   const fitAddonRef = useRef(null)
@@ -85,6 +85,19 @@ export default function TerminalPanel({ sessionId }) {
       fitAddonRef.current = null
     }
   }, [])
+
+  // Refit when becoming visible (CSS display change needs a paint cycle)
+  useEffect(() => {
+    if (!active) return
+    requestAnimationFrame(() => {
+      try {
+        fitAddonRef.current?.fit()
+        if (sessionIdRef.current && termRef.current) {
+          window.electronAPI.ptyResize(sessionIdRef.current, termRef.current.cols, termRef.current.rows)
+        }
+      } catch { /* */ }
+    })
+  }, [active])
 
   // Wire PTY data/exit listeners — reconnect when sessionId changes
   useEffect(() => {
