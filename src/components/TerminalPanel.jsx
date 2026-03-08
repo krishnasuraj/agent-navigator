@@ -49,7 +49,6 @@ export default function TerminalPanel({ sessionId, active }) {
 
     const fitAddon = new FitAddon()
     const webLinksAddon = new WebLinksAddon()
-
     term.loadAddon(fitAddon)
     term.loadAddon(webLinksAddon)
     term.open(containerRef.current)

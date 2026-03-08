@@ -176,6 +176,7 @@ src/
     TerminalPanel.jsx   — xterm.js terminal with FitAddon + WebLinksAddon
     StateLog.jsx        — Sidebar: state badge + scrolling event log (expandable rows)
     SessionList.jsx     — Sidebar: session list with state dots + close button
+    KanbanBoard.jsx     — Board view: 3-column kanban (Idle/Working/Needs Input)
     ResizableSplit.jsx  — Draggable split layout
   App.jsx               — Multi-session orchestration, new agent modal, close modal
   main.jsx
@@ -260,16 +261,17 @@ Single window: sidebar (30%) + terminal (70%). Auto-spawns a login shell. User s
 
 ---
 
-### Stage 4: Orchestration Layer
+### Stage 4: Orchestration Layer (in progress)
 
 **Goal:** The app actively helps manage agents, not just display them.
 
 **What to build:**
 
-- **Attention zones.** Group sessions by what needs human attention: "Needs Input" (top), "Working" (middle), "Done" (bottom).
-- **Desktop notifications.** Fire when a session transitions to "Needs Input" or "Error."
-- **Cross-session file conflict detection.** Watch `git status` across worktrees, surface a warning if two agents are editing the same file.
-- **CI integration (stretch).** Poll GitHub Actions for each branch. Show CI status alongside session state. Route CI failure logs back to the agent via PTY write.
+- **Kanban board view.** Three columns: Idle, Working, Needs Input. Cards show branch name + last event. Click to expand with status detail + "Work with agent" button that switches to Agent view. ✅
+- **View toggle.** Agent/Board toggle in title bar. Both views stay mounted (terminals don't lose state). ✅
+- **Desktop notifications.** Fire when a session transitions to "Needs Input" or "Error." (deferred)
+- **Cross-session file conflict detection.** Watch `git status` across worktrees, surface a warning if two agents are editing the same file. (deferred)
+- **CI integration (stretch).** Poll GitHub Actions for each branch. Show CI status alongside session state. (deferred)
 
 ---
 

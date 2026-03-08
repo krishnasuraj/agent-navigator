@@ -3,11 +3,13 @@ import TerminalPanel from './components/TerminalPanel'
 import StateLog from './components/StateLog'
 import SessionList from './components/SessionList'
 import ResizableSplit from './components/ResizableSplit'
+import KanbanBoard from './components/KanbanBoard'
 
 export default function App() {
   const [sessions, setSessions] = useState([])
   const [activeSessionId, setActiveSessionId] = useState(null)
   const [showNewAgent, setShowNewAgent] = useState(false)
+  const [view, setView] = useState('agent') // 'agent' | 'board'
   const [branchInput, setBranchInput] = useState('')
   const spawned = useRef(false)
 
@@ -112,6 +114,11 @@ export default function App() {
     }
   }
 
+  const handleSelectAgent = (sessionId) => {
+    setActiveSessionId(sessionId)
+    setView('agent')
+  }
+
   const [closeModal, setCloseModal] = useState(null) // { sessionId, session, dirty }
 
   const handleCloseSession = async (sessionId) => {
@@ -212,23 +219,50 @@ export default function App() {
         className="flex items-center justify-between border-b border-border px-4 py-2 shrink-0"
         style={{ WebkitAppRegion: 'drag' }}
       >
-        <span className="text-xs font-medium text-text-secondary pl-16">Agent Manager</span>
-        <button
-          onClick={() => setShowNewAgent(true)}
-          style={{ WebkitAppRegion: 'no-drag' }}
-          className="text-xs text-text-muted hover:text-text-primary border border-border hover:border-border-bright rounded px-2 py-1 transition-colors"
-        >
-          + New Agent
-        </button>
+        <div className="flex items-center gap-3 pl-16">
+          <span className="text-xs font-medium text-text-secondary">Agent Manager</span>
+          <div className="flex border border-border rounded overflow-hidden" style={{ WebkitAppRegion: 'no-drag' }}>
+            <button
+              onClick={() => setView('agent')}
+              className={`text-[11px] px-2.5 py-1 transition-colors ${view === 'agent' ? 'bg-surface-2 text-text-primary' : 'text-text-muted hover:text-text-secondary'}`}
+            >
+              Agent
+            </button>
+            <button
+              onClick={() => setView('board')}
+              className={`text-[11px] px-2.5 py-1 transition-colors ${view === 'board' ? 'bg-surface-2 text-text-primary' : 'text-text-muted hover:text-text-secondary'}`}
+            >
+              Board
+            </button>
+          </div>
+        </div>
+        <div style={{ WebkitAppRegion: 'no-drag' }}>
+          <button
+            onClick={() => setShowNewAgent(true)}
+            className="text-xs text-text-muted hover:text-text-primary border border-border hover:border-border-bright rounded px-2 py-1 transition-colors"
+          >
+            + New Agent
+          </button>
+        </div>
       </div>
 
-      <ResizableSplit
-        left={sidebar}
-        right={terminals}
-        defaultRatio={0.3}
-        minLeftPx={250}
-        minRightPx={400}
-      />
+      <div className={`flex-1 min-h-0 ${view === 'agent' ? 'flex' : 'hidden'}`}>
+        <ResizableSplit
+          left={sidebar}
+          right={terminals}
+          defaultRatio={0.3}
+          minLeftPx={250}
+          minRightPx={400}
+        />
+      </div>
+      <div className={`flex-1 min-h-0 ${view === 'board' ? 'flex' : 'hidden'}`}>
+        <KanbanBoard
+          sessions={sessions}
+          onSelectAgent={handleSelectAgent}
+          onClose={handleCloseSession}
+          onNewAgent={() => setShowNewAgent(true)}
+        />
+      </div>
 
       {closeModal && (
         <div
@@ -301,9 +335,6 @@ export default function App() {
                 placeholder="feat-my-feature"
                 className="w-full text-xs font-mono bg-surface-0 text-text-primary border border-border rounded px-3 py-2 outline-none focus:border-status-running"
               />
-              <p className="text-[10px] text-text-muted mt-1.5">
-                Creates a git worktree and launches Claude in it.
-              </p>
               <div className="flex justify-end gap-2 mt-5">
                 <button
                   type="button"

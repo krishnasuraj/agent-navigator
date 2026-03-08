@@ -37,6 +37,8 @@ ipcMain.on('pty:resize', (_, sessionId, cols, rows) => {
   ptyManager.resize(sessionId, cols, rows)
 })
 
+ipcMain.handle('app:getCwd', () => process.cwd())
+
 // Test config
 ipcMain.handle('app:getTestConfig', () => {
   const testCwds = []
@@ -63,6 +65,15 @@ ipcMain.handle('worktree:isDirty', (_, branch) => {
 ipcMain.handle('worktree:remove', (_, branch, force) => {
   worktreeManager.remove(branch, { force })
   return { ok: true }
+})
+
+// Folder picker
+ipcMain.handle('dialog:pick-folder', async () => {
+  const win = mainWindow || BrowserWindow.getAllWindows()[0]
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
 })
 
 // Session lifecycle

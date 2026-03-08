@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // App config
   getTestConfig: () => ipcRenderer.invoke('app:getTestConfig'),
+  getAppCwd: () => ipcRenderer.invoke('app:getCwd'),
 
   // Worktree
   worktreeCreate: (branch) => ipcRenderer.invoke('worktree:create', branch),
