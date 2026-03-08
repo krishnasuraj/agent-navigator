@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { autoUpdater } from 'electron-updater'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
 import { createPtyManager } from './ptyManager.js'
 import { createJsonlWatcher } from './jsonlWatcher.js'
 import { worktreeCreate, worktreeRemove, worktreeIsDirty } from './worktreeManager.js'
@@ -48,6 +49,18 @@ function addWorkspace(dirPath) {
   return ws
 }
 
+function getActiveWindow() {
+  return mainWindow || BrowserWindow.getAllWindows()[0]
+}
+
+async function pickDirectory() {
+  const win = getActiveWindow()
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+}
+
 // Auto-add cwd as workspace if it's a git repo
 if (isGitRepo(process.cwd())) {
   addWorkspace(process.cwd())
@@ -70,11 +83,9 @@ ipcMain.handle('app:getCwd', () => process.cwd())
 ipcMain.handle('workspace:list', () => workspaces)
 
 ipcMain.handle('workspace:add-via-dialog', async () => {
-  const win = mainWindow || BrowserWindow.getAllWindows()[0]
-  if (!win) return null
-  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
-  if (result.canceled || result.filePaths.length === 0) return null
-  return addWorkspace(result.filePaths[0])
+  const dirPath = await pickDirectory()
+  if (!dirPath) return null
+  return addWorkspace(dirPath)
 })
 
 // Test config
@@ -106,13 +117,7 @@ ipcMain.handle('worktree:remove', (_, workspace, branch, force) => {
 })
 
 // Folder picker
-ipcMain.handle('dialog:pick-folder', async () => {
-  const win = mainWindow || BrowserWindow.getAllWindows()[0]
-  if (!win) return null
-  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
-  if (result.canceled || result.filePaths.length === 0) return null
-  return result.filePaths[0]
-})
+ipcMain.handle('dialog:pick-folder', () => pickDirectory())
 
 // Session lifecycle
 ipcMain.handle('session:getCwd', (_, sessionId) => {
@@ -182,11 +187,8 @@ function buildMenu() {
           label: 'Add Workspace…',
           accelerator: 'CmdOrCtrl+Shift+O',
           click: async () => {
-            const win = mainWindow || BrowserWindow.getAllWindows()[0]
-            if (!win) return
-            const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
-            if (result.canceled || result.filePaths.length === 0) return
-            addWorkspace(result.filePaths[0])
+            const dirPath = await pickDirectory()
+            if (dirPath) addWorkspace(dirPath)
           },
         },
         { type: 'separator' },
@@ -272,7 +274,7 @@ autoUpdater.on('update-available', (info) => {
 })
 
 autoUpdater.on('update-downloaded', (info) => {
-  const win = mainWindow || BrowserWindow.getAllWindows()[0]
+  const win = getActiveWindow()
   if (!win) return
   dialog
     .showMessageBox(win, {

@@ -14,6 +14,7 @@ export default function App() {
   const [workspaces, setWorkspaces] = useState([])
   const [selectedWorkspace, setSelectedWorkspace] = useState(null)
   const spawned = useRef(false)
+  const workspacesRef = useRef(workspaces)
 
   const spawnAgent = useCallback(async (branch, workspace, cwd) => {
     const id = `session-${Date.now()}`
@@ -34,11 +35,12 @@ export default function App() {
     if (spawned.current) return
     spawned.current = true
 
-    window.electronAPI.getWorkspaces().then(ws => {
+    const wsPromise = window.electronAPI.getWorkspaces().then(ws => {
       setWorkspaces(ws)
       if (ws.length > 0) {
         setSelectedWorkspace(ws[0].path)
       }
+      return ws
     })
 
     const TEST_PROMPTS = [
@@ -64,8 +66,7 @@ export default function App() {
           }, i * 2000)
         }
       } else {
-        // Show new agent modal if workspaces exist
-        window.electronAPI.getWorkspaces().then(ws => {
+        wsPromise.then(ws => {
           if (ws.length > 0) setShowNewAgent(true)
         })
       }
@@ -84,15 +85,18 @@ export default function App() {
     return () => remove()
   }, [])
 
+  // Keep workspacesRef in sync
+  useEffect(() => { workspacesRef.current = workspaces }, [workspaces])
+
   // Listen for menu events (Cmd+N from native menu)
   useEffect(() => {
     const remove = window.electronAPI.onMenuNewAgent(() => {
-      if (workspaces.length > 0) {
+      if (workspacesRef.current.length > 0) {
         setShowNewAgent(true)
       }
     })
     return () => remove()
-  }, [workspaces])
+  }, [])
 
   // Global IPC listeners
   useEffect(() => {
@@ -115,6 +119,16 @@ export default function App() {
       removeEvent()
     }
   }, [])
+
+  const removeSession = (sessionId) => {
+    setSessions(prev => {
+      const remaining = prev.filter(s => s.id !== sessionId)
+      if (activeSessionId === sessionId) {
+        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
+      }
+      return remaining
+    })
+  }
 
   const openNewAgentModal = () => {
     if (workspaces.length === 0) return
@@ -156,7 +170,7 @@ export default function App() {
     }
   }
 
-  const handleAddWorkspace = async () => {
+  const addWorkspaceViaDialog = async () => {
     const ws = await window.electronAPI.addWorkspaceViaDialog()
     if (ws) {
       setWorkspaces(prev => {
@@ -164,8 +178,13 @@ export default function App() {
         return [...prev, ws]
       })
       setSelectedWorkspace(ws.path)
-      setShowNewAgent(true)
     }
+    return ws
+  }
+
+  const handleAddWorkspace = async () => {
+    const ws = await addWorkspaceViaDialog()
+    if (ws) setShowNewAgent(true)
   }
 
   const handleSelectAgent = (sessionId) => {
@@ -198,13 +217,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to kill session:', err)
     }
-    setSessions(prev => {
-      const remaining = prev.filter(s => s.id !== sessionId)
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
-      }
-      return remaining
-    })
+    removeSession(sessionId)
   }
 
   const doEndSessionAndRemoveWorktree = async (sessionId, workspace, branch, dirty) => {
@@ -219,13 +232,7 @@ export default function App() {
     } catch (err) {
       console.error('Failed to remove worktree:', err)
     }
-    setSessions(prev => {
-      const remaining = prev.filter(s => s.id !== sessionId)
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null)
-      }
-      return remaining
-    })
+    removeSession(sessionId)
   }
 
   const sidebar = (
@@ -410,14 +417,7 @@ export default function App() {
                 onChange={async (e) => {
                   if (e.target.value === '__add__') {
                     e.target.value = selectedWorkspace || ''
-                    const ws = await window.electronAPI.addWorkspaceViaDialog()
-                    if (ws) {
-                      setWorkspaces(prev => {
-                        if (prev.some(w => w.path === ws.path)) return prev
-                        return [...prev, ws]
-                      })
-                      setSelectedWorkspace(ws.path)
-                    }
+                    await addWorkspaceViaDialog()
                   } else {
                     setSelectedWorkspace(e.target.value)
                   }
