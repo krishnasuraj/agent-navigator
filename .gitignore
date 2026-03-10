@@ -8,3 +8,4 @@ release
 *.env.*
 .claude/
 tests/
+blog-draft.md

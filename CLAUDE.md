@@ -230,6 +230,7 @@ git push && git push origin vX.Y.Z
 gh release create vX.Y.Z \
   "release/Agent Manager-X.Y.Z-arm64.dmg" \
   "release/Agent Manager-X.Y.Z.dmg" \
+  release/latest-mac.yml \
   --title "vX.Y.Z" \
   --notes "Release notes here"
 ```

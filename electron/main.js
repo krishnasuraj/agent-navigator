@@ -1,8 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import pkg from 'electron-updater'
-const { autoUpdater } = pkg
 import { createPtyManager } from './ptyManager.js'
 import { createJsonlWatcher } from './jsonlWatcher.js'
 import { worktreeCreate, worktreeRemove, worktreeIsDirty } from './worktreeManager.js'
@@ -279,37 +277,42 @@ function createWindow() {
   })
 }
 
-// ─── Auto-update ──────────────────────────────────────────────────
+// ─── Update check ─────────────────────────────────────────────────
+// Check GitHub for a newer release and prompt the user to download it.
 
-autoUpdater.autoDownload = true
-autoUpdater.autoInstallOnAppQuit = true
+const REPO = 'krishnasuraj/agent-manager'
 
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info.version)
-})
+async function checkForUpdates() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+    if (!res.ok) return
+    const release = await res.json()
+    const latest = release.tag_name?.replace(/^v/, '')
+    const current = app.getVersion()
+    if (!latest || latest === current) return
 
-autoUpdater.on('update-downloaded', (info) => {
-  const win = getActiveWindow()
-  if (!win) return
-  dialog
-    .showMessageBox(win, {
+    const [cMaj, cMin, cPatch] = current.split('.').map(Number)
+    const [lMaj, lMin, lPatch] = latest.split('.').map(Number)
+    const isNewer = lMaj > cMaj || (lMaj === cMaj && lMin > cMin) || (lMaj === cMaj && lMin === cMin && lPatch > cPatch)
+    if (!isNewer) return
+
+    const win = getActiveWindow()
+    if (!win) return
+    const { response } = await dialog.showMessageBox(win, {
       type: 'info',
-      title: 'Update Ready',
-      message: `Version ${info.version} has been downloaded.`,
-      detail: 'Restart the app to apply the update.',
-      buttons: ['Restart Now', 'Later'],
+      title: 'Update Available',
+      message: `Version ${latest} is available (you have ${current}).`,
+      detail: 'Would you like to open the download page?',
+      buttons: ['Download', 'Later'],
       defaultId: 0,
     })
-    .then(({ response }) => {
-      if (response === 0) {
-        autoUpdater.quitAndInstall()
-      }
-    })
-})
-
-autoUpdater.on('error', (err) => {
-  console.error('Auto-update error:', err)
-})
+    if (response === 0) {
+      shell.openExternal(release.html_url)
+    }
+  } catch (err) {
+    console.error('Update check failed:', err)
+  }
+}
 
 app.whenReady().then(() => {
   buildMenu()
@@ -317,7 +320,7 @@ app.whenReady().then(() => {
 
   // Check for updates (skip in dev)
   if (!process.env.ELECTRON_RENDERER_URL) {
-    autoUpdater.checkForUpdates().catch(() => {})
+    checkForUpdates()
   }
 
   app.on('activate', () => {
