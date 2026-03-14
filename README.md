@@ -4,7 +4,7 @@
 
 A desktop app for running multiple CLI coding agents in parallel. Each agent gets its own interactive terminal and isolated git worktree. A kanban board tracks what every agent is doing so you know which ones need your attention.
 
-Currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code). More agents planned.
+Currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [OpenAI Codex CLI](https://github.com/openai/codex). More agents planned.
 
 **Key features:**
 - Run multiple coding agents simultaneously, each in its own git worktree
@@ -14,19 +14,20 @@ Currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ## Prerequisites
 
-- A supported coding agent installed:
+- At least one supported coding agent installed:
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude` command available in your terminal)
+  - [OpenAI Codex CLI](https://github.com/openai/codex) (`codex` command available in your terminal)
 - macOS (Windows and Linux builds planned)
 
-## Installation
+## Install
 
-### Option 1: Homebrew (recommended)
+### Homebrew (recommended)
 
 ```bash
 brew install --cask krishnasuraj/tap/agent-manager
 ```
 
-After installation, remove the quarantine flag (required because the app is not notarized — see [Security note](#security-note)):
+The app is not notarized (see [Why the security warning?](#why-the-security-warning)), so you need to remove the quarantine flag before the first launch:
 
 ```bash
 xattr -cr "/Applications/Agent Manager.app"
@@ -34,31 +35,38 @@ xattr -cr "/Applications/Agent Manager.app"
 
 Then open **Agent Manager** from your Applications folder.
 
-### Option 2: Direct download
+#### Upgrading with Homebrew
+
+```bash
+brew update && brew upgrade --cask krishnasuraj/tap/agent-manager
+xattr -cr "/Applications/Agent Manager.app"
+```
+
+That's it — Homebrew handles removing the old version and installing the new one.
+
+### Direct DMG download
 
 1. Download the DMG for your Mac from the [latest release](https://github.com/krishnasuraj/agent-manager/releases/latest):
-   - **Apple Silicon** (M1/M2/M3/M4): `Agent Manager-x.x.x-arm64.dmg`
-   - **Intel**: `Agent Manager-x.x.x.dmg`
+   - **Apple Silicon** (M1/M2/M3/M4): `agent-manager-x.x.x-arm64.dmg`
+   - **Intel**: `agent-manager-x.x.x-x64.dmg`
 2. Open the DMG and drag **Agent Manager** to your Applications folder
-3. On first launch, macOS will block the app. To bypass this:
-
-   **Method A** (terminal):
+3. Remove the quarantine flag:
    ```bash
    xattr -cr "/Applications/Agent Manager.app"
    ```
-   Then open the app normally.
+   Or: try to open the app, click **Done** on the warning, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
-   **Method B** (GUI):
-   1. Try to open the app — you'll see "Apple could not verify..."
-   2. Click **Done** (not "Move to Trash")
-   3. Go to **System Settings > Privacy & Security**
-   4. Scroll down to the message: *"Agent Manager" was blocked*
-   5. Click **Open Anyway**
-   6. Enter your password
+#### Upgrading via direct download
 
-   You only need to do this once.
+There is no auto-update mechanism yet. To upgrade to a new version:
 
-### Option 3: Build from source
+1. Quit Agent Manager
+2. Delete the old app from `/Applications`
+3. Download the new DMG from the [releases page](https://github.com/krishnasuraj/agent-manager/releases/latest)
+4. Drag the new version to `/Applications`
+5. Run `xattr -cr "/Applications/Agent Manager.app"` again (or allow it in System Settings > Privacy & Security)
+
+### Build from source
 
 ```bash
 git clone https://github.com/krishnasuraj/agent-manager.git
@@ -68,9 +76,9 @@ npm run rebuild    # compiles node-pty for Electron
 npm run dev        # starts the app in development mode
 ```
 
-## Security note
+## Why the security warning?
 
-The app is ad-hoc signed but not notarized with Apple (notarization requires a $99/year Apple Developer account). The code is fully open source — you can audit it or build from source if you prefer.
+The app is signed but not yet notarized with Apple, so macOS will show an "Apple could not verify" warning on first launch. Running `xattr -cr "/Applications/Agent Manager.app"` removes this block. The code is fully open source — you can audit it or [build from source](#build-from-source) if you prefer.
 
 ## Usage
 
