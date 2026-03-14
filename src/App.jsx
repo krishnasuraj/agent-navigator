@@ -526,7 +526,7 @@ export default function App() {
               )}
               {selectedWs?.isGit ? (
                 <>
-                  <label className="text-xs text-text-secondary block mb-1.5">Agent name</label>
+                  <label className="text-xs text-text-secondary block mb-1.5">Agent name <span className="text-text-muted">(creates a new worktree)</span></label>
                   <input
                     autoFocus
                     value={branchInput}
