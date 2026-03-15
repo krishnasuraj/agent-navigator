@@ -1,4 +1,4 @@
-# Agent Manager
+# Agent Navigator
 
 ## Vision
 
@@ -275,8 +275,8 @@ git push && git push origin vX.Y.Z
 **4. Create the GitHub Release:**
 ```bash
 gh release create vX.Y.Z \
-  "release/Agent Manager-X.Y.Z-arm64.dmg" \
-  "release/Agent Manager-X.Y.Z.dmg" \
+  "release/Agent Navigator-X.Y.Z-arm64.dmg" \
+  "release/Agent Navigator-X.Y.Z.dmg" \
   release/latest-mac.yml \
   --title "vX.Y.Z" \
   --notes "Release notes here"
@@ -285,10 +285,10 @@ gh release create vX.Y.Z \
 **5. Update the Homebrew tap** (`krishnasuraj/homebrew-tap`):
 ```bash
 # Get new SHA256 hashes
-shasum -a 256 "release/Agent Manager-X.Y.Z-arm64.dmg"
-shasum -a 256 "release/Agent Manager-X.Y.Z.dmg"
+shasum -a 256 "release/Agent Navigator-X.Y.Z-arm64.dmg"
+shasum -a 256 "release/Agent Navigator-X.Y.Z.dmg"
 
-# Edit Casks/agent-manager.rb in the homebrew-tap repo:
+# Edit Casks/agent-navigator.rb in the homebrew-tap repo:
 #   - Update `version "X.Y.Z"`
 #   - Update both `sha256` values
 # Then commit and push to krishnasuraj/homebrew-tap
@@ -296,8 +296,8 @@ shasum -a 256 "release/Agent Manager-X.Y.Z.dmg"
 
 **Install methods for users:**
 - **Direct download:** grab the DMG from the GitHub Releases page
-- **Homebrew:** `brew install --cask krishnasuraj/tap/agent-manager`
-- Both require `xattr -cr "/Applications/Agent Manager.app"` on first launch (not notarized)
+- **Homebrew:** `brew install --cask krishnasuraj/tap/agent-navigator`
+- Both require `xattr -cr "/Applications/Agent Navigator.app"` on first launch (not notarized)
 
 ### Theme Tokens (`src/index.css` via `@theme`)
 

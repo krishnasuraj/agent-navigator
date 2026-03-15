@@ -1,10 +1,10 @@
 {
-  "name": "agent-manager",
-  "productName": "Agent Manager",
+  "name": "agent-navigator",
+  "productName": "Agent Navigator",
   "description": "Desktop app for managing multiple Claude Code agents in parallel",
   "author": "Krishna Suraj",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
@@ -17,8 +17,8 @@
     "dist:all": "electron-vite build && CXXFLAGS=\"-I$(xcrun --show-sdk-path)/usr/include/c++/v1 -isysroot $(xcrun --show-sdk-path)\" electron-builder --mac --win --linux"
   },
   "build": {
-    "appId": "com.krishnasuraj.agent-manager",
-    "productName": "Agent Manager",
+    "appId": "com.krishnasuraj.agent-navigator",
+    "productName": "Agent Navigator",
     "directories": {
       "output": "release"
     },
@@ -45,7 +45,7 @@
       "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "Agent Manager",
+      "title": "Agent Navigator",
       "contents": [
         {
           "x": 130,

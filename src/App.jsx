@@ -312,7 +312,7 @@ export default function App() {
         style={{ WebkitAppRegion: 'drag' }}
       >
         <div className="flex items-center gap-3 pl-16">
-          <span className="text-xs font-medium text-text-secondary">Agent Manager</span>
+          <span className="text-xs font-medium text-text-secondary">Agent Navigator</span>
           {hasWorkspaces && (
             <div className="flex border border-border rounded overflow-hidden" style={{ WebkitAppRegion: 'no-drag' }}>
               <button
@@ -345,7 +345,7 @@ export default function App() {
       {showWelcome && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-sm font-semibold text-text-primary mb-2">Welcome to Agent Manager</h2>
+            <h2 className="text-sm font-semibold text-text-primary mb-2">Welcome to Agent Navigator</h2>
             <p className="text-xs text-text-muted mb-6">Select a git repository to get started.</p>
             <button
               onClick={handleAddWorkspace}

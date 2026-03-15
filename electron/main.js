@@ -458,7 +458,7 @@ function createWindow() {
 // ─── Update check ─────────────────────────────────────────────────
 // Check GitHub for a newer release and prompt the user to download it.
 
-const REPO = 'krishnasuraj/agent-manager'
+const REPO = 'krishnasuraj/agent-navigator'
 
 async function checkForUpdates() {
   try {

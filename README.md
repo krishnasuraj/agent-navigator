@@ -1,4 +1,4 @@
-# Agent Manager 
+# Agent Navigator 
 <img width="128" height="128" alt="helm" src="https://github.com/user-attachments/assets/7da47a7e-e560-4936-8699-4a2ac38e1796" />
  
 
@@ -24,35 +24,35 @@ Currently supports [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 ### Homebrew (recommended)
 
 ```bash
-brew install --cask krishnasuraj/tap/agent-manager
+brew install --cask krishnasuraj/tap/agent-navigator
 ```
 
 The app is not notarized (see [Why the security warning?](#why-the-security-warning)), so you need to remove the quarantine flag before the first launch:
 
 ```bash
-xattr -cr "/Applications/Agent Manager.app"
+xattr -cr "/Applications/Agent Navigator.app"
 ```
 
-Then open **Agent Manager** from your Applications folder.
+Then open **Agent Navigator** from your Applications folder.
 
 #### Upgrading with Homebrew
 
 ```bash
-brew update && brew upgrade --cask krishnasuraj/tap/agent-manager
-xattr -cr "/Applications/Agent Manager.app"
+brew update && brew upgrade --cask krishnasuraj/tap/agent-navigator
+xattr -cr "/Applications/Agent Navigator.app"
 ```
 
 That's it — Homebrew handles removing the old version and installing the new one.
 
 ### Direct DMG download
 
-1. Download the DMG for your Mac from the [latest release](https://github.com/krishnasuraj/agent-manager/releases/latest):
-   - **Apple Silicon** (M1/M2/M3/M4): `agent-manager-x.x.x-arm64.dmg`
-   - **Intel**: `agent-manager-x.x.x-x64.dmg`
-2. Open the DMG and drag **Agent Manager** to your Applications folder
+1. Download the DMG for your Mac from the [latest release](https://github.com/krishnasuraj/agent-navigator/releases/latest):
+   - **Apple Silicon** (M1/M2/M3/M4): `agent-navigator-x.x.x-arm64.dmg`
+   - **Intel**: `agent-navigator-x.x.x-x64.dmg`
+2. Open the DMG and drag **Agent Navigator** to your Applications folder
 3. Remove the quarantine flag:
    ```bash
-   xattr -cr "/Applications/Agent Manager.app"
+   xattr -cr "/Applications/Agent Navigator.app"
    ```
    Or: try to open the app, click **Done** on the warning, then go to **System Settings > Privacy & Security** and click **Open Anyway**.
 
@@ -60,17 +60,17 @@ That's it — Homebrew handles removing the old version and installing the new o
 
 There is no auto-update mechanism yet. To upgrade to a new version:
 
-1. Quit Agent Manager
+1. Quit Agent Navigator
 2. Delete the old app from `/Applications`
-3. Download the new DMG from the [releases page](https://github.com/krishnasuraj/agent-manager/releases/latest)
+3. Download the new DMG from the [releases page](https://github.com/krishnasuraj/agent-navigator/releases/latest)
 4. Drag the new version to `/Applications`
-5. Run `xattr -cr "/Applications/Agent Manager.app"` again (or allow it in System Settings > Privacy & Security)
+5. Run `xattr -cr "/Applications/Agent Navigator.app"` again (or allow it in System Settings > Privacy & Security)
 
 ### Build from source
 
 ```bash
-git clone https://github.com/krishnasuraj/agent-manager.git
-cd agent-manager
+git clone https://github.com/krishnasuraj/agent-navigator.git
+cd agent-navigator
 npm install
 npm run rebuild    # compiles node-pty for Electron
 npm run dev        # starts the app in development mode
@@ -78,7 +78,7 @@ npm run dev        # starts the app in development mode
 
 ## Why the security warning?
 
-The app is signed but not yet notarized with Apple, so macOS will show an "Apple could not verify" warning on first launch. Running `xattr -cr "/Applications/Agent Manager.app"` removes this block. The code is fully open source — you can audit it or [build from source](#build-from-source) if you prefer.
+The app is signed but not yet notarized with Apple, so macOS will show an "Apple could not verify" warning on first launch. Running `xattr -cr "/Applications/Agent Navigator.app"` removes this block. The code is fully open source — you can audit it or [build from source](#build-from-source) if you prefer.
 
 ## Usage
 
