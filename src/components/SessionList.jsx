@@ -9,10 +9,11 @@ const DOT = {
 export default function SessionList({ sessions, activeSessionId, onSelect, onClose, showWorkspace }) {
   return (
     <div className="border-b border-border shrink-0">
-      {sessions.map((session) => {
+      {sessions.map((session, i) => {
         const isActive = session.id === activeSessionId
         const stateKey = session.state?.state || (session.claudeActive ? 'idle' : null)
         const dotClass = stateKey ? (DOT[stateKey] || DOT.idle) : 'bg-surface-2'
+        const shortcutKey = i < 9 ? String(i + 1) : i === 9 ? '0' : null
 
         return (
           <div
@@ -37,6 +38,11 @@ export default function SessionList({ sessions, activeSessionId, onSelect, onClo
                     }}
                   >
                     {session.toolId}
+                  </span>
+                )}
+                {shortcutKey && (
+                  <span className="text-[10px] font-mono text-text-muted opacity-60 ml-auto shrink-0">
+                    ctrl-{shortcutKey}
                   </span>
                 )}
               </div>

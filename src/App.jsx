@@ -102,6 +102,25 @@ export default function App() {
     window.electronAPI.getSettings().then(setSettingsData)
   }, [])
 
+  // Ctrl+1-9,0 to switch between agents (0 = 10th agent)
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      let index = -1
+      if (e.key >= '1' && e.key <= '9') {
+        index = parseInt(e.key) - 1
+      } else if (e.key === '0') {
+        index = 9
+      }
+      if (index === -1 || index >= sessions.length) return
+      e.preventDefault()
+      setActiveSessionId(sessions[index].id)
+      setView('agent')
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [sessions])
+
   // Listen for menu events (Cmd+N from native menu, Cmd+1/2 for view switching, Cmd+, for settings)
   useEffect(() => {
     const removeNewAgent = window.electronAPI.onMenuNewAgent(() => {

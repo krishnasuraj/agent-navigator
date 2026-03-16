@@ -88,6 +88,14 @@ export default function TerminalPanel({ sessionId, active }) {
     termRef.current = term
     fitAddonRef.current = fitAddon
 
+    // Let Ctrl+digit bubble up for session switching shortcuts
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.type === 'keydown') {
+        if (e.key >= '0' && e.key <= '9') return false
+      }
+      return true
+    })
+
     // Initial fit
     try {
       fitAddon.fit()
