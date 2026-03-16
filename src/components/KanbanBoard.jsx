@@ -17,8 +17,11 @@ export default function KanbanBoard({ sessions, onSelectAgent, onClose, onNewAge
   const [collapsedIds, setCollapsedIds] = useState(new Set())
 
   const grouped = { idle: [], working: [], 'needs-input': [] }
-  for (const session of sessions) {
+  const sessionIndex = new Map()
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i]
     grouped[getColumnKey(session)].push(session)
+    if (i < 10) sessionIndex.set(session.id, i < 9 ? String(i + 1) : '0')
   }
 
   return (
@@ -66,18 +69,25 @@ export default function KanbanBoard({ sessions, onSelectAgent, onClose, onNewAge
                           </span>
                         )}
                       </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        {sessionIndex.has(session.id) && (
+                          <span className="text-[10px] font-mono text-text-muted opacity-60">
+                            ctrl-{sessionIndex.get(session.id)}
+                          </span>
+                        )}
                       {onClose && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             onClose(session.id)
                           }}
-                          className="text-text-muted hover:text-red-400 text-xs shrink-0 ml-2"
+                          className="text-text-muted hover:text-red-400 text-xs shrink-0"
                           title="Close session"
                         >
                           ✕
                         </button>
                       )}
+                      </div>
                     </div>
                     {showWorkspace && session.workspace && (
                       <p className="text-[10px] text-text-muted truncate">
