@@ -121,6 +121,9 @@ export default function TerminalPanel({ sessionId, active }) {
     if (!active) return
     requestAnimationFrame(() => {
       fitAndResize()
+      if (termRef.current) {
+        termRef.current.scrollToBottom()
+      }
     })
   }, [active])
 
