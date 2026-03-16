@@ -26,6 +26,8 @@ export function createJsonlWatcher(getWindow) {
 
   // filePath → sessionId: which session owns each JSONL file
   const fileOwners = new Map()
+  // sessionId → last emitted state (for dedupe)
+  const lastEmittedStates = new Map()
 
   // Optional callback for state changes (used by main process for notifications)
   let stateChangeCallback = null
@@ -42,6 +44,9 @@ export function createJsonlWatcher(getWindow) {
   }
 
   function emitState(sessionId, state) {
+    const prev = lastEmittedStates.get(sessionId)
+    if (prev && prev.state === state.state && prev.summary === state.summary) return
+    lastEmittedStates.set(sessionId, state)
     sendToRenderer('jsonl:state', sessionId, state)
     if (stateChangeCallback) stateChangeCallback(sessionId, state)
   }
@@ -106,7 +111,7 @@ export function createJsonlWatcher(getWindow) {
     // Stale timer: re-read file and re-derive state after 5s of no chokidar events.
     // Catches events written between reads (e.g. task_complete right after agent_message).
     // For Claude: also detects permission prompts (tool_use with no result).
-    // For Codex: also detects approval prompts (function_call with no output).
+    // For Codex: also detects approval prompts (stale escalated function_call).
     clearTimeout(state.staleTimer)
     state.staleTimer = setTimeout(() => {
       readNewLines(sessionId, state)
@@ -179,6 +184,7 @@ export function createJsonlWatcher(getWindow) {
       filePath: null,
       lastWriteTime: Date.now(),
       staleTimer: null,
+      rederiveTimer: null,
       lastThinkingTime: 0,
       locked: false,
       knownFiles: existingFiles || new Map(),
@@ -186,9 +192,19 @@ export function createJsonlWatcher(getWindow) {
     }
 
     sessionStates.set(sessionId, state)
+    lastEmittedStates.delete(sessionId)
     console.log(`[jsonlWatcher:${sessionId}] registered (tool: ${toolId}, cwd: ${state.cwd})`)
 
     ensureWatcher(toolId)
+
+    // Re-derive state periodically so time-based transitions (e.g. working →
+    // needs-input once spinner suppression expires) do not depend on new file
+    // writes or UI interaction.
+    state.rederiveTimer = setInterval(() => {
+      const tc = getToolConfig(state.toolId)
+      const derived = tc.deriveState(state.events, state.lastWriteTime, state.lastThinkingTime)
+      emitState(sessionId, derived)
+    }, 2000)
   }
 
   function readNewLines(sessionId, state) {
@@ -382,8 +398,10 @@ export function createJsonlWatcher(getWindow) {
     const state = sessionStates.get(sessionId)
     if (!state) return
     clearTimeout(state.staleTimer)
+    if (state.rederiveTimer) clearInterval(state.rederiveTimer)
     if (state.filePath) fileOwners.delete(state.filePath)
     sessionStates.delete(sessionId)
+    lastEmittedStates.delete(sessionId)
 
     // Stop watchers for tools that have no remaining sessions
     for (const [toolId, watcher] of watchers) {
@@ -402,9 +420,11 @@ export function createJsonlWatcher(getWindow) {
   function stopAll() {
     for (const [, state] of sessionStates) {
       clearTimeout(state.staleTimer)
+      if (state.rederiveTimer) clearInterval(state.rederiveTimer)
     }
     sessionStates.clear()
     fileOwners.clear()
+    lastEmittedStates.clear()
     for (const [, watcher] of watchers) {
       watcher.close()
     }
